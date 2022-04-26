@@ -81,17 +81,21 @@
 //! }));
 //! # }
 //! ```
-#![cfg_attr(feature = "nightly", feature(test))]
-#![deny(warnings)]
+// #![deny(warnings)]
 #![warn(missing_docs)]
+#![no_std]
 #[macro_use]
 extern crate serde_derive;
 #[cfg_attr(test, macro_use)]
 extern crate serde_json;
 
+extern crate sgx_tstd as std;
+
 use serde_json::{Map, Value};
-use std::{fmt, mem};
 use std::error::Error;
+use std::{fmt, mem};
+use std::vec::Vec;
+use std::string::String;
 
 /// Representation of JSON Patch (list of patch operations)
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
@@ -100,42 +104,61 @@ pub struct Patch(pub Vec<PatchOperation>);
 /// JSON Patch 'add' operation representation
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct AddOperation {
-    path: String,
-    value: Value,
+    /// JSON-Pointer value [RFC6901](https://tools.ietf.org/html/rfc6901) that references a location
+    /// within the target document where the operation is performed.
+    pub path: String,
+    /// Value to add to the target location.
+    pub value: Value,
 }
 
 /// JSON Patch 'remove' operation representation
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct RemoveOperation {
-    path: String,
+    /// JSON-Pointer value [RFC6901](https://tools.ietf.org/html/rfc6901) that references a location
+    /// within the target document where the operation is performed.
+    pub path: String,
 }
 
 /// JSON Patch 'replace' operation representation
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct ReplaceOperation {
-    path: String,
-    value: Value,
+    /// JSON-Pointer value [RFC6901](https://tools.ietf.org/html/rfc6901) that references a location
+    /// within the target document where the operation is performed.
+    pub path: String,
+    /// Value to replace with.
+    pub value: Value,
 }
 
 /// JSON Patch 'move' operation representation
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct MoveOperation {
-    from: String,
-    path: String,
+    /// JSON-Pointer value [RFC6901](https://tools.ietf.org/html/rfc6901) that references a location
+    /// to move value from.
+    pub from: String,
+    /// JSON-Pointer value [RFC6901](https://tools.ietf.org/html/rfc6901) that references a location
+    /// within the target document where the operation is performed.
+    pub path: String,
 }
 
 /// JSON Patch 'copy' operation representation
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct CopyOperation {
-    from: String,
-    path: String,
+    /// JSON-Pointer value [RFC6901](https://tools.ietf.org/html/rfc6901) that references a location
+    /// to copy value from.
+    pub from: String,
+    /// JSON-Pointer value [RFC6901](https://tools.ietf.org/html/rfc6901) that references a location
+    /// within the target document where the operation is performed.
+    pub path: String,
 }
 
 /// JSON Patch 'test' operation representation
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct TestOperation {
-    path: String,
-    value: Value,
+    /// JSON-Pointer value [RFC6901](https://tools.ietf.org/html/rfc6901) that references a location
+    /// within the target document where the operation is performed.
+    pub path: String,
+    /// Value to test against.
+    pub value: Value,
 }
 
 /// JSON Patch single patch operation
@@ -169,10 +192,9 @@ pub enum PatchError {
 
 impl Error for PatchError {
     fn description(&self) -> &str {
-        use PatchError::*;
         match *self {
-            InvalidPointer => "invalid pointer",
-            TestFailed => "test failed",
+            PatchError::InvalidPointer => "invalid pointer",
+            PatchError::TestFailed => "test failed",
         }
     }
 }
@@ -370,9 +392,8 @@ fn apply_patches(doc: &mut Value, patches: &[PatchOperation]) -> Result<(), Patc
         Some((patch, tail)) => (patch, tail),
     };
 
-    use PatchOperation::*;
     match *patch {
-        Add(ref op) => {
+        PatchOperation::Add(ref op) => {
             let prev = add(doc, op.path.as_str(), op.value.clone())?;
             apply_patches(doc, tail).map_err(move |e| {
                 match prev {
@@ -382,21 +403,21 @@ fn apply_patches(doc: &mut Value, patches: &[PatchOperation]) -> Result<(), Patc
                 e
             })
         }
-        Remove(ref op) => {
+        PatchOperation::Remove(ref op) => {
             let prev = remove(doc, op.path.as_str(), false)?;
             apply_patches(doc, tail).map_err(move |e| {
                 assert!(add(doc, op.path.as_str(), prev).unwrap().is_none());
                 e
             })
         }
-        Replace(ref op) => {
+        PatchOperation::Replace(ref op) => {
             let prev = replace(doc, op.path.as_str(), op.value.clone())?;
             apply_patches(doc, tail).map_err(move |e| {
                 replace(doc, op.path.as_str(), prev).unwrap();
                 e
             })
         }
-        Move(ref op) => {
+        PatchOperation::Move(ref op) => {
             let prev = mov(doc, op.from.as_str(), op.path.as_str(), false)?;
             apply_patches(doc, tail).map_err(move |e| {
                 mov(doc, op.path.as_str(), op.from.as_str(), true).unwrap();
@@ -406,7 +427,7 @@ fn apply_patches(doc: &mut Value, patches: &[PatchOperation]) -> Result<(), Patc
                 e
             })
         }
-        Copy(ref op) => {
+        PatchOperation::Copy(ref op) => {
             let prev = copy(doc, op.from.as_str(), op.path.as_str())?;
             apply_patches(doc, tail).map_err(move |e| {
                 match prev {
@@ -416,7 +437,7 @@ fn apply_patches(doc: &mut Value, patches: &[PatchOperation]) -> Result<(), Patc
                 e
             })
         }
-        Test(ref op) => {
+        PatchOperation::Test(ref op) => {
             test(doc, op.path.as_str(), &op.value)?;
             apply_patches(doc, tail)
         }
@@ -426,26 +447,25 @@ fn apply_patches(doc: &mut Value, patches: &[PatchOperation]) -> Result<(), Patc
 /// Patch provided JSON document (given as `serde_json::Value`) in place.
 /// Operations are applied in unsafe manner. If any of the operations fails, all previous
 /// operations are not reverted.
-pub unsafe fn patch_unsafe(doc: &mut Value, patch: &Patch) -> Result<(), PatchError> {
-    use PatchOperation::*;
+pub fn patch_unsafe(doc: &mut Value, patch: &Patch) -> Result<(), PatchError> {
     for op in &patch.0 {
         match *op {
-            Add(ref op) => {
+            PatchOperation::Add(ref op) => {
                 add(doc, op.path.as_str(), op.value.clone())?;
             }
-            Remove(ref op) => {
+            PatchOperation::Remove(ref op) => {
                 remove(doc, op.path.as_str(), false)?;
             }
-            Replace(ref op) => {
+            PatchOperation::Replace(ref op) => {
                 replace(doc, op.path.as_str(), op.value.clone())?;
             }
-            Move(ref op) => {
+            PatchOperation::Move(ref op) => {
                 mov(doc, op.from.as_str(), op.path.as_str(), false)?;
             }
-            Copy(ref op) => {
+            PatchOperation::Copy(ref op) => {
                 copy(doc, op.from.as_str(), op.path.as_str())?;
             }
-            Test(ref op) => {
+            PatchOperation::Test(ref op) => {
                 test(doc, op.path.as_str(), &op.value)?;
             }
         };
@@ -521,7 +541,7 @@ pub fn merge(doc: &mut Value, patch: &Value) {
 mod diff;
 
 #[cfg(feature = "diff")]
-pub use diff::diff;
+pub use self::diff::diff;
 
 #[cfg(test)]
 mod tests;

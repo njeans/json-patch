@@ -1,6 +1,6 @@
 [package]
 name = "json-patch"
-version = "0.2.3-alpha.0"
+version = "0.2.5"
 authors = ["Ivan Dubrov <dubrov.ivan@gmail.com>"]
 categories = []
 keywords = ["json", "json-patch"]
@@ -8,6 +8,7 @@ description = "RFC 6902, JavaScript Object Notation (JSON) Patch"
 repository = "https://github.com/idubrov/json-patch"
 license = "MIT/Apache-2.0"
 readme = "README.md"
+edition = "2018"
 
 [features]
 default = ["diff"]
@@ -15,18 +16,16 @@ nightly = []
 diff = ["treediff"]
 
 [dependencies]
-serde = "1.0.61"
-serde_derive = "1.0.61"
-serde_json = "1.0.17"
+serde = { git = "https://github.com/mesalock-linux/serde-sgx.git" }
+serde_derive = { git = "https://github.com/mesalock-linux/serde-sgx.git" }
 
-[dependencies.treediff]
-version = "3.0.1"
-features = ["with-serde-json"]
-optional = true
+sgx_tstd = { git = "https://github.com/apache/teaclave-sgx-sdk.git" }
+
+# serde_json = { git = "https://github.com/enigmampc/serde-json-sgx.git", branch = "1.0.40-sgx-1.1.0" }
+serde_json = { git = "https://github.com/mesalock-linux/serde-json-sgx" }
+
+# treediff = { git = "https://github.com/enigmampc/treediff-rs.git", branch = "3.0.1-sgx-1.1.0", features = ["with-serde-json"], optional = true }
+treediff = { git = "https://github.com/njeans/treediff-rs.git", branch = "3.0.1-sgx-1.1.0", features = ["with-serde-json"], optional = true }
 
 [dev-dependencies]
 rand = "0.5.0"
-
-[dev-dependencies.serde_json]
-version = "1.0.17"
-features = ["preserve_order"]

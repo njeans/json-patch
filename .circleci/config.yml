@@ -2,17 +2,16 @@ version: 2
 jobs:
   build:
     docker:
-      - image: idubrov/rust-stm32:latest
-    environment:
-      - RUSTFLAGS: "-C link-dead-code"
+      - image: xd009642/tarpaulin
     steps:
       - checkout
+      - run: rustup toolchain install stable
+      - run: rustup component add clippy
       - run: cargo +stable build
-      - run: cargo +stable test --all
+      - run: cargo +stable test --all-targets
       - run: cargo build
-      - run: cargo test --all
       - run: cargo clippy
-      - run: cargo kcov
+      - run: cargo tarpaulin --out Xml
       - run:
           name: Uploading code coverage
           command: |
